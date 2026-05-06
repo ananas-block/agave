@@ -60,7 +60,14 @@ solana-transaction-context = { workspace = true, features = ["bincode"] }
 thiserror = { workspace = true }
 
 [dev-dependencies]
+ark-bn254 = "0.5"
+ark-ec = "0.5"
+ark-ff = "0.5"
+ark-serialize = "0.5"
+ark-std = "0.5"
 assert_matches = { workspace = true }
+criterion = { workspace = true }
+hex-literal = { workspace = true }
 solana-epoch-rewards = { workspace = true }
 solana-epoch-schedule = { workspace = true }
 solana-fee-calculator = { workspace = true }
@@ -75,3 +82,15 @@ test-case = { workspace = true }
 
 [lints]
 workspace = true
+
+[[bench]]
+name = "alt_bn128"
+harness = false
+
+[[bench]]
+name = "poseidon"
+harness = false
+
+[[bench]]
+name = "compression"
+harness = false
