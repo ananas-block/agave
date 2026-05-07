@@ -1,0 +1,42 @@
+{
+  "alt_bn128": {
+    "G1 add|BE": 89954.0,
+    "G1 add|LE": 91707.0,
+    "G1 mul|BE": 93809.0,
+    "G1 mul|LE": 93621.0,
+    "G2 add|BE": 5243.400000000001,
+    "G2 add|LE": 3269.1,
+    "G2 mul|BE": 255330.0,
+    "G2 mul|LE": 257300.0,
+    "Pairing n=2|BE": 688200.0,
+    "Pairing n=2|LE": 681970.0,
+    "Pairing n=4|BE": 1238900.0,
+    "Pairing n=4|LE": 1200400.0,
+    "Pairing n=8|BE": 2283800.0,
+    "Pairing n=8|LE": 2297500.0,
+    "Pairing n=16|BE": 4525500.0,
+    "Pairing n=16|LE": 4511000.0
+  },
+  "poseidon": {
+    "poseidon n=1|BE": 10129.0,
+    "poseidon n=1|LE": 10081.0,
+    "poseidon n=2|BE": 15994.0,
+    "poseidon n=2|LE": 15814.0,
+    "poseidon n=4|BE": 32892.0,
+    "poseidon n=4|LE": 33762.0,
+    "poseidon n=8|BE": 91581.0,
+    "poseidon n=8|LE": 88988.0,
+    "poseidon n=12|BE": 176600.0,
+    "poseidon n=12|LE": 176020.0
+  },
+  "compression": {
+    "g1_compress|BE": 383.51,
+    "g1_compress|LE": 64.623,
+    "g1_decompress|BE": 4721.4,
+    "g1_decompress|LE": 4454.0,
+    "g2_compress|BE": 1085.2,
+    "g2_compress|LE": 99.598,
+    "g2_decompress|BE": 16676.0,
+    "g2_decompress|LE": 15646.0
+  }
+}

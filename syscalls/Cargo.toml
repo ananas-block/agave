@@ -67,7 +67,6 @@ ark-serialize = "0.5"
 ark-std = "0.5"
 assert_matches = { workspace = true }
 criterion = { workspace = true }
-hex-literal = { workspace = true }
 solana-epoch-rewards = { workspace = true }
 solana-epoch-schedule = { workspace = true }
 solana-fee-calculator = { workspace = true }

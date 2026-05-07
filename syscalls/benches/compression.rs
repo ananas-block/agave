@@ -1,13 +1,3 @@
-// Wallclock micro-bench for the alt_bn128 G1/G2 compress/decompress syscalls
-// (`SyscallAltBn128Compression`, syscalls/src/lib.rs:2446-2580). Calls the
-// `solana_bn254::compression::prelude::*` functions directly, bypassing the
-// InvokeContext / memory-translation layer.
-//
-// Random uncompressed points are generated via ark-bn254 with the same seed
-// as the alt_bn128 benches. Compressed forms are pre-computed once at setup
-// by calling the compress functions; those outputs become the inputs for the
-// decompress benches. Inputs cycle through a pool per criterion iteration.
-
 mod random_fixtures;
 
 use {
@@ -19,7 +9,7 @@ use {
     },
 };
 
-const POOL: usize = 128;
+use random_fixtures::POOL;
 
 fn bench_g1(c: &mut Criterion) {
     let uncompressed = random_fixtures::random_g1_points(POOL);

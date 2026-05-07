@@ -1,22 +1,5 @@
-// Shared by multiple bench binaries; each only uses a subset of helpers.
 #![allow(dead_code)]
 
-// Random valid BN254 inputs generated via ark-bn254 with a fixed seed.
-//
-// Each public function returns an `InputPool` of `pool_size` independent
-// fixtures. The bench cycles through them with `i = (i + 1) % pool_size` so
-// every criterion sample sees a fresh input — same pattern as the historical
-// `altbn128_syscall_benches/sdk/benches/bn_syscalls.rs` (2022). Reusing one
-// fixed input would let cache warmth and branch prediction bias the numbers.
-//
-// arkworks serializes G1/G2 in LE (c0 before c1 for Fq2), which matches
-// `solana_bn254::target_arch::convert_endianness` LE expectations. The BE form
-// is derived by chunked byte-reversal (32-byte chunks for G1 / scalars,
-// 64-byte chunks for G2).
-
-// `rand` is re-exported by ark-std at the version arkworks expects (currently
-// rand 0.8 series). Using the workspace's rand 0.9 directly conflicts with the
-// `RngCore` trait bound on `UniformRand::rand`.
 use {
     ark_bn254::{Fr, G1Projective, G2Projective},
     ark_ec::CurveGroup,
@@ -26,6 +9,9 @@ use {
 };
 
 const SEED: u64 = 0xa17b428;
+
+pub const POOL: usize = 1024;
+pub const PAIRING_POOL: usize = 1024;
 
 fn rng() -> StdRng {
     StdRng::seed_from_u64(SEED)
@@ -74,7 +60,6 @@ impl InputPool {
     }
 }
 
-/// Pool of single random G1 points (one 64-byte point per entry).
 pub fn random_g1_points(pool_size: usize) -> InputPool {
     let mut r = rng();
     let mut pool = InputPool::with_capacity(pool_size);
@@ -87,7 +72,6 @@ pub fn random_g1_points(pool_size: usize) -> InputPool {
     pool
 }
 
-/// Pool of single random G2 points (one 128-byte point per entry).
 pub fn random_g2_points(pool_size: usize) -> InputPool {
     let mut r = rng();
     let mut pool = InputPool::with_capacity(pool_size);
@@ -163,13 +147,6 @@ pub fn random_g2_mul(pool_size: usize) -> InputPool {
     pool
 }
 
-/// Build a pool of `pool_size` inputs, each containing `n` pairs whose pairing
-/// product equals the Fq12 identity (output byte = `0x01`). Requires even
-/// `n >= 2`. Construction: pairs come in canceling twos `(P, Q), (-P, Q)` so
-/// that `e(P,Q) · e(-P,Q) = e(O,Q) = 1`.
-///
-/// Mirrors real on-chain workloads (BLS sig verify, Groth16 verify) where the
-/// host inputs are valid relations and the syscall is expected to return 1.
 pub fn random_pairing(pool_size: usize, n: usize) -> InputPool {
     assert!(n >= 2 && n.is_multiple_of(2), "n must be even and >= 2");
     let mut r = rng();

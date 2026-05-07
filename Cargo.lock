@@ -10739,7 +10739,6 @@ dependencies = [
  "assert_matches",
  "bincode",
  "criterion",
- "hex-literal",
  "libsecp256k1",
  "num-traits",
  "solana-account 4.3.0",
