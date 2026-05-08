@@ -33,6 +33,7 @@ solana-big-mod-exp = { workspace = true }
 solana-blake3-hasher = { workspace = true, features = ["blake3"] }
 solana-bls12-381-syscall = { workspace = true }
 solana-bn254 = { workspace = true }
+solana-bn254-prepared-syscall = { workspace = true }
 solana-clock = { workspace = true }
 solana-cpi = { workspace = true }
 solana-curve25519 = { workspace = true }

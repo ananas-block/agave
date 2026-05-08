@@ -2,7 +2,7 @@
 
 use {
     ark_bn254::{Fr, G1Projective, G2Projective},
-    ark_ec::CurveGroup,
+    ark_ec::{AffineRepr, CurveGroup},
     ark_ff::UniformRand,
     ark_serialize::CanonicalSerialize,
     ark_std::rand::{rngs::StdRng, SeedableRng},
@@ -147,8 +147,52 @@ pub fn random_g2_mul(pool_size: usize) -> InputPool {
     pool
 }
 
+pub struct PreparedPairingPool {
+    pub g1s: Vec<Vec<solana_bn254_prepared_syscall::PodG1>>,
+    pub g2_preps: Vec<Vec<solana_bn254_prepared_syscall::PodPreparedG2>>,
+}
+
+impl PreparedPairingPool {
+    fn with_capacity(n: usize) -> Self {
+        Self {
+            g1s: Vec::with_capacity(n),
+            g2_preps: Vec::with_capacity(n),
+        }
+    }
+}
+
+pub fn random_pairing_prepared(pool_size: usize, n: usize) -> PreparedPairingPool {
+    use solana_bn254_prepared_syscall::{prepare_g2, PodG1, PodPreparedG2};
+
+    fn pod_g1(g: &ark_bn254::G1Affine) -> PodG1 {
+        let mut limbs = [0u64; 8];
+        if !g.infinity {
+            let (x, y) = g.xy().expect("non-infinity has xy");
+            limbs[0..4].copy_from_slice(&x.0 .0);
+            limbs[4..8].copy_from_slice(&y.0 .0);
+        }
+        PodG1(limbs)
+    }
+
+    let mut r = rng();
+    let mut pool = PreparedPairingPool::with_capacity(pool_size);
+    for _ in 0..pool_size {
+        let mut g1s: Vec<PodG1> = Vec::with_capacity(n);
+        let mut g2_preps: Vec<PodPreparedG2> = Vec::with_capacity(n);
+        for _ in 0..n {
+            let g1 = G1Projective::rand(&mut r).into_affine();
+            let g2 = G2Projective::rand(&mut r).into_affine();
+            g1s.push(pod_g1(&g1));
+            g2_preps.push(prepare_g2(&g2));
+        }
+        pool.g1s.push(g1s);
+        pool.g2_preps.push(g2_preps);
+    }
+    pool
+}
+
 pub fn random_pairing(pool_size: usize, n: usize) -> InputPool {
-    assert!(n >= 2 && n.is_multiple_of(2), "n must be even and >= 2");
+    assert!(n >= 2, "n must be >= 2");
     let mut r = rng();
     let mut pool = InputPool::with_capacity(pool_size);
     for _ in 0..pool_size {
@@ -161,6 +205,11 @@ pub fn random_pairing(pool_size: usize, n: usize) -> InputPool {
                 le.extend_from_slice(&g1_le(g1));
                 le.extend_from_slice(&g2_le(q));
             }
+        }
+        if !n.is_multiple_of(2) {
+            let q = G2Projective::rand(&mut r);
+            le.extend_from_slice(&[0u8; 64]);
+            le.extend_from_slice(&g2_le(q));
         }
         let mut be = Vec::with_capacity(192 * n);
         for pair in le.chunks_exact(192) {

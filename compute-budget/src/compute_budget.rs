@@ -145,6 +145,8 @@ pub struct ComputeBudget {
     pub bls12_381_one_pair_cost: u64,
     /// Incremental number of compute units consumed per pair in a bls12_381 pairing.
     pub bls12_381_additional_pair_cost: u64,
+    pub alt_bn128_pairing_prepared_base_cost: u64,
+    pub alt_bn128_pairing_prepared_per_pair_cost: u64,
 }
 
 #[cfg(feature = "dev-context-only-utils")]
@@ -229,6 +231,8 @@ impl ComputeBudget {
             bls12_381_g2_validate_cost: cost.bls12_381_g2_validate_cost,
             bls12_381_one_pair_cost: cost.bls12_381_one_pair_cost,
             bls12_381_additional_pair_cost: cost.bls12_381_additional_pair_cost,
+            alt_bn128_pairing_prepared_base_cost: cost.alt_bn128_pairing_prepared_base_cost,
+            alt_bn128_pairing_prepared_per_pair_cost: cost.alt_bn128_pairing_prepared_per_pair_cost,
         }
     }
 
@@ -298,6 +302,8 @@ impl ComputeBudget {
             bls12_381_g2_validate_cost: self.bls12_381_g2_validate_cost,
             bls12_381_one_pair_cost: self.bls12_381_one_pair_cost,
             bls12_381_additional_pair_cost: self.bls12_381_additional_pair_cost,
+            alt_bn128_pairing_prepared_base_cost: self.alt_bn128_pairing_prepared_base_cost,
+            alt_bn128_pairing_prepared_per_pair_cost: self.alt_bn128_pairing_prepared_per_pair_cost,
         }
     }
 

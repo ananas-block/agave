@@ -21,18 +21,20 @@ Derived: criterion upper-bound time / 33 ns/CU.
 
 | op | mainnet CU | updated CU | change |
 | --- | ---: | ---: | ---: |
-| G1 add | 334 | 98 | -70.7% |
-| G1 mul | 3,840 | 1,536 | -60.0% |
-| G2 add | 535 | 158 | -70.5% |
-| G2 mul | 15,670 | 6,174 | -60.6% |
-| pairing first | 36,364 | 9,043 | -75.1% |
-| pairing other | 12,121 | 5,207 | -57.0% |
+| G1 add | 334 | 99 | -70.4% |
+| G1 mul | 3,840 | 1,534 | -60.1% |
+| G2 add | 535 | 160 | -70.1% |
+| G2 mul | 15,670 | 6,244 | -60.2% |
+| pairing first | 36,364 | 8,889 | -75.6% |
+| pairing other | 12,121 | 5,353 | -55.8% |
+| prepared pairing base | 0 | 8,393 | — |
+| prepared pairing per pair | 0 | 2,070 | — |
 | g1_compress | 30 | 11 | -63.3% |
 | g1_decompress | 398 | 144 | -63.8% |
 | g2_compress | 86 | 32 | -62.8% |
-| g2_decompress | 13,610 | 501 | -96.3% |
-| poseidon coefficient `a` (per `n²`) | 61 | 36 | -41.0% |
-| poseidon coefficient `c` | 542 | 361 | -33.4% |
+| g2_decompress | 13,610 | 505 | -96.3% |
+| poseidon coefficient `a` (per `n²`) | 61 | 35 | -42.6% |
+| poseidon coefficient `c` | 542 | 378 | -30.3% |
 
 <!-- TABLE-END: proposed-cu -->
 
@@ -54,16 +56,16 @@ All M5 Pro numbers are the **upper bound** of criterion's 95% confidence interva
 <!-- TABLE-BEGIN: alt_bn128 -->
 | op | 2022 c6a.2xlarge (Zen 3) | M5 Pro (ark 0.4) | M5 Pro (ark 0.5) | CU @ 33 ns (ark 0.5) | mainnet CU |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| G1 add | 4.155 µs | 89.954 µs | 3.247 µs | 98 | 334 |
-| G1 mul | 126.68 µs | 93.809 µs | 50.674 µs | 1,536 | 3,840 |
-| G2 add | — | 5.2434 µs | 5.2008 µs | 158 | 535 |
-| G2 mul | — | 255.33 µs | 203.74 µs | 6,174 | 15,670 |
-| Pairing n=2 | 1.372 ms | 688.2 µs | 479.88 µs | 14,542 | 48,485 |
-| Pairing n=3 | 1.682 ms | — | — | — | 60,606 |
-| Pairing n=4 | 1.998 ms | 1.2389 ms | 808.48 µs | 24,499 | 72,727 |
+| G1 add | 4.155 µs | 89.954 µs | 3.2821 µs | 99 | 334 |
+| G1 mul | 126.68 µs | 93.809 µs | 50.621 µs | 1,534 | 3,840 |
+| G2 add | — | 5.2434 µs | 5.2919 µs | 160 | 535 |
+| G2 mul | — | 255.33 µs | 206.04 µs | 6,244 | 15,670 |
+| Pairing n=2 | 1.372 ms | 688.2 µs | 489.33 µs | 14,828 | 48,485 |
+| Pairing n=3 | 1.682 ms | — | 597.15 µs | 18,095 | 60,606 |
+| Pairing n=4 | 1.998 ms | 1.2389 ms | 811.85 µs | 24,602 | 72,727 |
 | Pairing n=5 | 2.323 ms | — | — | — | 84,848 |
-| Pairing n=8 | — | 2.2838 ms | 1.4926 ms | 45,230 | 121,211 |
-| Pairing n=16 | — | 4.5255 ms | 2.8804 ms | 87,285 | 218,179 |
+| Pairing n=8 | — | 2.2838 ms | 1.5132 ms | 45,855 | 121,211 |
+| Pairing n=16 | — | 4.5255 ms | 2.9519 ms | 89,452 | 218,179 |
 <!-- TABLE-END: alt_bn128 -->
 
 
@@ -72,6 +74,32 @@ All M5 Pro numbers are the **upper bound** of criterion's 95% confidence interva
 
 ```
 cargo bench -p solana-syscalls --bench alt_bn128
+```
+
+---
+
+# `sol_alt_bn128_pairing_prepared` syscall bench
+
+Multi-pairing on BN254 over `n` `(G1, PreparedG2)` pairs. Returns the post-final-exponentiation `Fq12` GT element. All G2 inputs must be pre-prepared off-chain via `prepare_g2`; the syscall does no G2-side Miller-loop arithmetic.
+
+CU constants are derived per `cargo bench` run via least-squares fit `time_ns / 33 = base + per_pair · n`, surfaced in the proposed-cu table at the top of this README as "prepared pairing base" and "prepared pairing per pair".
+
+## Results (LE)
+
+<!-- TABLE-BEGIN: prepared-pairing -->
+| n pairs | M5 Pro (ark 0.5) | CU @ 33 ns (ark 0.5) |
+| --- | ---: | ---: |
+| 2 | 412.7 µs | 12,506 |
+| 3 | 480.06 µs | 14,547 |
+| 4 | 550.73 µs | 16,689 |
+| 8 | 827.09 µs | 25,063 |
+| 16 | 1.3683 ms | 41,464 |
+<!-- TABLE-END: prepared-pairing -->
+
+## Run
+
+```
+cargo bench -p solana-syscalls --bench alt_bn128 -- "BN254 prepared pairing"
 ```
 
 ---
@@ -89,11 +117,11 @@ Original PR: [solana-labs/solana#32680](https://github.com/solana-labs/solana/pu
 <!-- TABLE-BEGIN: poseidon -->
 | n inputs | light-poseidon Ryzen 9 7945HX (Zen 4) | M5 Pro (ark 0.4) | M5 Pro (ark 0.5) | CU @ 33 ns (ark 0.5) | mainnet CU (61n² + 542) |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| 1 | 12.735 µs | 10.129 µs | 10.123 µs | 307 | 603 |
-| 2 | 18.963 µs | 15.994 µs | 15.641 µs | 474 | 786 |
-| 4 | 38.513 µs | 32.892 µs | 33.154 µs | 1,005 | 1,518 |
-| 8 | 105.49 µs | 91.581 µs | 90.291 µs | 2,736 | 4,446 |
-| 12 | 210.81 µs | 176.6 µs | 179.48 µs | 5,439 | 9,326 |
+| 1 | 12.735 µs | 10.129 µs | 10.441 µs | 316 | 603 |
+| 2 | 18.963 µs | 15.994 µs | 15.448 µs | 468 | 786 |
+| 4 | 38.513 µs | 32.892 µs | 33.664 µs | 1,020 | 1,518 |
+| 8 | 105.49 µs | 91.581 µs | 90.35 µs | 2,738 | 4,446 |
+| 12 | 210.81 µs | 176.6 µs | 176.36 µs | 5,344 | 9,326 |
 <!-- TABLE-END: poseidon -->
 
 ## Run
@@ -121,10 +149,10 @@ Original PR: [solana-labs/solana#32870](https://github.com/solana-labs/solana/pu
 <!-- TABLE-BEGIN: compression -->
 | op | 2023 c6a.2xlarge (BE) | M5 Pro ark 0.4 (BE) | M5 Pro ark 0.4 (LE) | M5 Pro ark 0.5 (BE) | M5 Pro ark 0.5 (LE) | CU @ 33 ns (ark 0.5, BE) | mainnet CU |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
-| g1_compress | 1.0049 µs | 383.51 ns | 64.623 ns | 371.94 ns | 64.511 ns | 11 | 30 |
-| g1_decompress | 13.154 µs | 4.7214 µs | 4.454 µs | 4.7491 µs | 4.4216 µs | 144 | 398 |
-| g2_compress | 2.8543 µs | 1.0852 µs | 99.598 ns | 1.0551 µs | 99.789 ns | 32 | 86 |
-| g2_decompress | 449.13 µs | 16.676 µs | 15.646 µs | 16.537 µs | 15.648 µs | 501 | 13,610 |
+| g1_compress | 1.0049 µs | 383.51 ns | 64.623 ns | 374.03 ns | 64.115 ns | 11 | 30 |
+| g1_decompress | 13.154 µs | 4.7214 µs | 4.454 µs | 4.7554 µs | 4.4959 µs | 144 | 398 |
+| g2_compress | 2.8543 µs | 1.0852 µs | 99.598 ns | 1.0605 µs | 95.51 ns | 32 | 86 |
+| g2_decompress | 449.13 µs | 16.676 µs | 15.646 µs | 16.681 µs | 15.667 µs | 505 | 13,610 |
 <!-- TABLE-END: compression -->
 
 ## Run

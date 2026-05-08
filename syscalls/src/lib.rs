@@ -321,6 +321,8 @@ pub fn create_program_runtime_environment(
     debugging_features: bool,
 ) -> Result<ProgramRuntimeEnvironment, Error> {
     let enable_alt_bn128_syscall = feature_set.enable_alt_bn128_syscall;
+    let enable_alt_bn128_pairing_prepared_syscall =
+        feature_set.enable_alt_bn128_pairing_prepared_syscall;
     let enable_alt_bn128_compression_syscall = feature_set.enable_alt_bn128_compression_syscall;
     let enable_big_mod_exp_syscall = feature_set.enable_big_mod_exp_syscall;
     let blake3_syscall_enabled = feature_set.blake3_syscall_enabled;
@@ -505,6 +507,13 @@ pub fn create_program_runtime_environment(
         enable_alt_bn128_syscall,
         "sol_alt_bn128_group_op",
         SyscallAltBn128
+    )?;
+
+    register_feature_gated_function!(
+        result,
+        enable_alt_bn128_pairing_prepared_syscall,
+        "sol_alt_bn128_pairing_prepared",
+        SyscallAltBn128PairingPrepared
     )?;
 
     // Big_mod_exp
@@ -1896,6 +1905,57 @@ declare_builtin_function!(
             _ => {
                 Err(SyscallError::InvalidAttribute.into())
             }
+        }
+    }
+);
+
+declare_builtin_function!(
+    SyscallAltBn128PairingPrepared,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        num_pairs: u64,
+        g1_addr: u64,
+        prepared_g2_addr: u64,
+        result_addr: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        use solana_bn254_prepared_syscall::{PodG1, PodGt, PodPreparedG2};
+
+        let check_aligned = invoke_context.get_check_aligned();
+        let execution_cost = invoke_context.get_execution_cost();
+        let cost = execution_cost
+            .alt_bn128_pairing_prepared_base_cost
+            .saturating_add(
+                execution_cost
+                    .alt_bn128_pairing_prepared_per_pair_cost
+                    .saturating_mul(num_pairs),
+            );
+        invoke_context.compute_meter.consume_checked(cost)?;
+
+        let memory_mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
+        let g1s = translate_slice::<PodG1>(memory_mapping, g1_addr, num_pairs, check_aligned)?;
+        let g2_preps = translate_slice::<PodPreparedG2>(
+            memory_mapping,
+            prepared_g2_addr,
+            num_pairs,
+            check_aligned,
+        )?;
+
+        match solana_bn254_prepared_syscall::alt_bn128_pairing_prepared(
+            solana_bn254_prepared_syscall::Version::V0,
+            g1s,
+            g2_preps,
+        ) {
+            Ok(gt) => {
+                translate_mut!(
+                    memory_mapping,
+                    check_aligned,
+                    let result_ref_mut: &mut PodGt = map(result_addr)?;
+                );
+                *result_ref_mut = gt;
+                Ok(SUCCESS)
+            }
+            Err(_) => Ok(1),
         }
     }
 );

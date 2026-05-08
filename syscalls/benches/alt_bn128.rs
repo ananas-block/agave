@@ -119,7 +119,7 @@ fn bench_g2_random(c: &mut Criterion) {
 }
 
 fn bench_pairing_random(c: &mut Criterion) {
-    const NS: &[usize] = &[2, 4, 8, 16];
+    const NS: &[usize] = &[2, 3, 4, 8, 16];
 
     let mut group = c.benchmark_group("BN254 Pairing random");
     for &n in NS {
@@ -158,5 +158,42 @@ fn bench_pairing_random(c: &mut Criterion) {
     group.finish();
 }
 
-criterion_group!(benches, bench_g1_random, bench_g2_random, bench_pairing_random,);
+fn bench_pairing_prepared(c: &mut Criterion) {
+    use solana_bn254_prepared_syscall::{alt_bn128_pairing_prepared, Version};
+
+    const NS: &[usize] = &[2, 3, 4, 8, 16];
+    const POOL: usize = 64;
+
+    let mut group = c.benchmark_group("BN254 prepared pairing");
+    for &n in NS {
+        let pool = random_fixtures::random_pairing_prepared(POOL, n);
+
+        for (g1s, g2_preps) in pool.g1s.iter().zip(pool.g2_preps.iter()) {
+            let _ = alt_bn128_pairing_prepared(Version::V0, g1s, g2_preps).unwrap();
+        }
+
+        let mut i = 0usize;
+        group.bench_with_input(BenchmarkId::new("LE", n), &n, |b, _| {
+            b.iter(|| {
+                let r = alt_bn128_pairing_prepared(
+                    Version::V0,
+                    &pool.g1s[i],
+                    &pool.g2_preps[i],
+                )
+                .unwrap();
+                i = (i + 1) % POOL;
+                r
+            })
+        });
+    }
+    group.finish();
+}
+
+criterion_group!(
+    benches,
+    bench_g1_random,
+    bench_g2_random,
+    bench_pairing_random,
+    bench_pairing_prepared,
+);
 criterion_main!(benches);

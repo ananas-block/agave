@@ -16,6 +16,10 @@ Usage:
     syscalls/benches/update_bench_results.py --from-file results/ark-0.5.txt --ark 0.5
         # parse a specific text file, save JSON, regenerate README
 
+    syscalls/benches/update_bench_results.py --filter "BN254 prepared pairing"
+        # run only benches whose name matches the criterion filter; merge into
+        # existing ark-{ver}.json (other categories preserved); regenerate README
+
 The README tables sit between HTML comment markers; the script replaces
 between them. Per-ark JSON files stay on disk so historical ark 0.4
 columns survive even when we only re-bench against the current ark.
@@ -94,9 +98,15 @@ ALT_BN128_BENCHES = {
     "BN254 G2 random/Multiplication/LE": ("G2 mul", "LE"),
     **{
         f"BN254 Pairing random/{e}/{n}": (f"Pairing n={n}", e)
-        for n in (2, 4, 8, 16)
+        for n in (2, 3, 4, 8, 16)
         for e in ("BE", "LE")
     },
+}
+
+PREPARED_PAIRING_NS = (2, 3, 4, 8, 16)
+PREPARED_PAIRING_BENCHES = {
+    f"BN254 prepared pairing/LE/{n}": (f"prepared n={n}", "LE")
+    for n in PREPARED_PAIRING_NS
 }
 
 POSEIDON_BENCHES = {
@@ -137,9 +147,12 @@ def detect_ark_version():
     return am.group(1)
 
 
-def run_benches():
+def run_benches(filter_pattern=None):
+    cmd = ["cargo", "bench", "-p", "solana-syscalls"]
+    if filter_pattern:
+        cmd += ["--", filter_pattern]
     proc = subprocess.run(
-        ["cargo", "bench", "-p", "solana-syscalls"],
+        cmd,
         cwd=ROOT,
         text=True,
         check=True,
@@ -166,10 +179,12 @@ def parse_criterion(text):
 
 def to_structured(parsed):
     """Group parsed criterion results into {category: {(op, endianness): ns}}."""
-    out = {"alt_bn128": {}, "poseidon": {}, "compression": {}}
+    out = {"alt_bn128": {}, "poseidon": {}, "compression": {}, "prepared_pairing": {}}
     for bench_id, ns in parsed.items():
         if bench_id in ALT_BN128_BENCHES:
             out["alt_bn128"][ALT_BN128_BENCHES[bench_id]] = ns
+        elif bench_id in PREPARED_PAIRING_BENCHES:
+            out["prepared_pairing"][PREPARED_PAIRING_BENCHES[bench_id]] = ns
         elif bench_id in POSEIDON_BENCHES:
             out["poseidon"][POSEIDON_BENCHES[bench_id]] = ns
         elif bench_id in COMPRESSION_BENCHES:
@@ -211,13 +226,23 @@ def load_results():
     return out
 
 
-def save_results(ark, structured):
+def save_results(ark, structured, merge=False):
     RESULTS_DIR.mkdir(exist_ok=True)
+    path = RESULTS_DIR / f"ark-{ark}.json"
+    if merge and path.exists():
+        existing = json.loads(path.read_text())
+        existing_struct = {
+            cat: {tuple(k.split("|")): v for k, v in d.items()}
+            for cat, d in existing.items()
+        }
+        for cat, d in structured.items():
+            existing_struct.setdefault(cat, {}).update(d)
+        structured = existing_struct
     serializable = {
         cat: {f"{op}|{end}": v for (op, end), v in d.items()}
         for cat, d in structured.items()
     }
-    (RESULTS_DIR / f"ark-{ark}.json").write_text(json.dumps(serializable, indent=2) + "\n")
+    path.write_text(json.dumps(serializable, indent=2) + "\n")
 
 
 def arks_with_data(per_ark, category):
@@ -279,6 +304,51 @@ def render_poseidon(per_ark):
             + [fmt_int(cu(cu_t)), fmt_int(mainnet_poseidon(n))]
         )
     return render_table(headers, rows)
+
+
+def render_prepared_pairing(per_ark):
+    arks = arks_with_data(per_ark, "prepared_pairing")
+    cu_ark = arks[-1] if arks else "?"
+    headers = (
+        ["n pairs"]
+        + [f"M5 Pro (ark {a})" for a in arks]
+        + [f"CU @ 33 ns (ark {cu_ark})"]
+    )
+    rows = []
+    for n in PREPARED_PAIRING_NS:
+        op_key = (f"prepared n={n}", "LE")
+        ark_times = [
+            per_ark.get(a, {}).get("prepared_pairing", {}).get(op_key) for a in arks
+        ]
+        cu_t = ark_times[-1] if ark_times else None
+        rows.append(
+            [str(n)]
+            + [fmt_time(t) for t in ark_times]
+            + [fmt_int(cu(cu_t))]
+        )
+    return render_table(headers, rows)
+
+
+def fit_prepared_pair_costs(per_ark):
+    """Least-squares fit y = base + per_pair * n over the prepared-pairing samples.
+
+    Returns (base_cu, per_pair_cu) for the latest ark, or (None, None) if insufficient.
+    """
+    arks = arks_with_data(per_ark, "prepared_pairing")
+    if not arks:
+        return None, None
+    d = per_ark[arks[-1]].get("prepared_pairing", {})
+    pts = []
+    for n in PREPARED_PAIRING_NS:
+        t = d.get((f"prepared n={n}", "LE"))
+        if t is not None:
+            pts.append((n, t / NS_PER_CU))
+    if len(pts) < 2:
+        return None, None
+    xs = [n for n, _ in pts]
+    ys = [y for _, y in pts]
+    base, per_pair = least_squares(xs, ys)
+    return int(round(base)), int(round(per_pair))
 
 
 def render_compression(per_ark):
@@ -347,6 +417,11 @@ def render_proposed_cu(per_ark):
         rows.append(("pairing first", 36_364, int(round(first))))
         rows.append(("pairing other", 12_121, int(round(other))))
 
+    base_cu, per_pair_cu = fit_prepared_pair_costs(per_ark)
+    if base_cu is not None and per_pair_cu is not None:
+        rows.append(("prepared pairing base", 0, base_cu))
+        rows.append(("prepared pairing per pair", 0, per_pair_cu))
+
     for op in ("g1_compress", "g1_decompress", "g2_compress", "g2_decompress"):
         t = get("compression", (op, "BE"))
         rows.append((op, MAINNET_COMPRESSION[op], cu(t)))
@@ -409,6 +484,9 @@ def replace_proposed_cu_section(text, body):
 def update_readme(per_ark):
     text = README.read_text()
     text = replace_between_markers(text, "alt_bn128", render_alt_bn128(per_ark))
+    text = replace_between_markers(
+        text, "prepared-pairing", render_prepared_pairing(per_ark)
+    )
     text = replace_between_markers(text, "poseidon", render_poseidon(per_ark))
     text = replace_between_markers(text, "compression", render_compression(per_ark))
     text = replace_proposed_cu_section(text, render_proposed_cu(per_ark))
@@ -420,6 +498,11 @@ def main():
     ap.add_argument("--no-run", action="store_true", help="skip running benches; only regenerate README from existing results/")
     ap.add_argument("--from-file", help="parse a saved criterion text file instead of running benches")
     ap.add_argument("--ark", help="override ark version detection")
+    ap.add_argument(
+        "--filter",
+        help="run only benches matching the given criterion filter (e.g. 'BN254 prepared pairing'); "
+        "merges results into existing JSON instead of overwriting",
+    )
     args = ap.parse_args()
 
     ark = args.ark or detect_ark_version()
@@ -427,12 +510,18 @@ def main():
     if not args.no_run:
         if args.from_file:
             text = Path(args.from_file).read_text()
+            merge = False
         else:
-            print(f"running cargo bench against ark {ark}…", file=sys.stderr)
-            text = run_benches()
+            if args.filter:
+                print(f"running cargo bench against ark {ark} (filter: {args.filter!r})…", file=sys.stderr)
+            else:
+                print(f"running cargo bench against ark {ark}…", file=sys.stderr)
+            text = run_benches(args.filter)
+            merge = bool(args.filter)
         RESULTS_DIR.mkdir(exist_ok=True)
-        (RESULTS_DIR / f"ark-{ark}.txt").write_text(text)
-        save_results(ark, to_structured(parse_criterion(text)))
+        if not args.filter:
+            (RESULTS_DIR / f"ark-{ark}.txt").write_text(text)
+        save_results(ark, to_structured(parse_criterion(text)), merge=merge)
 
     per_ark = load_results()
     if not per_ark:

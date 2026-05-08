@@ -87,6 +87,7 @@ pub struct FeatureSnapshot {
     pub enable_sha512_syscall: bool,
     pub relax_post_exec_min_balance_check: bool,
     pub enable_tx_v1: bool,
+    pub enable_alt_bn128_pairing_prepared_syscall: bool,
 }
 
 impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
@@ -202,6 +203,9 @@ impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
             enable_sha512_syscall: is_active(&enable_sha512_syscall::ID),
             relax_post_exec_min_balance_check: is_active(&relax_post_exec_min_balance_check::ID),
             enable_tx_v1: is_active(&enable_tx_v1::ID),
+            enable_alt_bn128_pairing_prepared_syscall: is_active(
+                &enable_alt_bn128_pairing_prepared_syscall::ID,
+            ),
         }
     }
 }
@@ -367,6 +371,8 @@ impl FeatureSet {
             loader_v3_minimum_extend_program_size: snapshot.loader_v3_minimum_extend_program_size,
             enable_sha512_syscall: snapshot.enable_sha512_syscall,
             relax_post_exec_min_balance_check: snapshot.relax_post_exec_min_balance_check,
+            enable_alt_bn128_pairing_prepared_syscall: snapshot
+                .enable_alt_bn128_pairing_prepared_syscall,
         }
     }
 }
@@ -1540,6 +1546,10 @@ pub mod enable_tx_v1 {
     solana_pubkey::declare_id!("txv1hPU76QFBVeq3942jJ65e9Em2xbdbCJrzX8sM4U4");
 }
 
+pub mod enable_alt_bn128_pairing_prepared_syscall {
+    solana_pubkey::declare_id!("bn1hKNURMGQaQoEVxahcEAcqiX3NwRs6hgKKNSLeKxK");
+}
+
 pub static FEATURE_NAMES: LazyLock<AHashMap<Pubkey, &'static str>> = LazyLock::new(|| {
     [
         (secp256k1_program_enabled::id(), "secp256k1 program"),
@@ -2594,6 +2604,10 @@ pub static FEATURE_NAMES: LazyLock<AHashMap<Pubkey, &'static str>> = LazyLock::n
             "SIMD-0392: Relaxation of post-execution min_balance check",
         ),
         (enable_tx_v1::id(), "SIMD-0385: Transaction V1"),
+        (
+            enable_alt_bn128_pairing_prepared_syscall::id(),
+            "SIMD-TBD: alt_bn128 multi-pairing with pre-prepared G2 inputs",
+        ),
         /*************** ADD NEW FEATURES HERE ***************/
         /***** ADD NEW FEATURE BOOL TO `FeatureSnapshot` *****/
     ]
