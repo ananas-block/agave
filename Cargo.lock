@@ -7254,6 +7254,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "solana-bn254-gnark"
+version = "0.1.0"
+
+[[package]]
 name = "solana-bn254-prepared-syscall"
 version = "4.1.0-alpha.0"
 dependencies = [
@@ -10762,6 +10766,7 @@ dependencies = [
  "solana-blake3-hasher",
  "solana-bls12-381-syscall",
  "solana-bn254",
+ "solana-bn254-gnark",
  "solana-bn254-prepared-syscall",
  "solana-clock",
  "solana-cpi",

@@ -109,6 +109,16 @@ PREPARED_PAIRING_BENCHES = {
     for n in PREPARED_PAIRING_NS
 }
 
+PAIRING_GNARK_NS = (2, 3, 4, 8, 16)
+PAIRING_GNARK_BENCHES = {
+    f"BN254 Pairing gnark/LE/{n}": (f"gnark n={n}", "LE")
+    for n in PAIRING_GNARK_NS
+}
+PREPARED_PAIRING_GNARK_BENCHES = {
+    f"BN254 prepared pairing gnark/LE/{n}": (f"prepared gnark n={n}", "LE")
+    for n in PREPARED_PAIRING_NS
+}
+
 POSEIDON_BENCHES = {
     f"Poseidon Bn254X5/{e}/{n}": (f"poseidon n={n}", e)
     for n in (1, 2, 4, 8, 12)
@@ -179,12 +189,23 @@ def parse_criterion(text):
 
 def to_structured(parsed):
     """Group parsed criterion results into {category: {(op, endianness): ns}}."""
-    out = {"alt_bn128": {}, "poseidon": {}, "compression": {}, "prepared_pairing": {}}
+    out = {
+        "alt_bn128": {},
+        "poseidon": {},
+        "compression": {},
+        "prepared_pairing": {},
+        "pairing_gnark": {},
+        "prepared_pairing_gnark": {},
+    }
     for bench_id, ns in parsed.items():
         if bench_id in ALT_BN128_BENCHES:
             out["alt_bn128"][ALT_BN128_BENCHES[bench_id]] = ns
         elif bench_id in PREPARED_PAIRING_BENCHES:
             out["prepared_pairing"][PREPARED_PAIRING_BENCHES[bench_id]] = ns
+        elif bench_id in PAIRING_GNARK_BENCHES:
+            out["pairing_gnark"][PAIRING_GNARK_BENCHES[bench_id]] = ns
+        elif bench_id in PREPARED_PAIRING_GNARK_BENCHES:
+            out["prepared_pairing_gnark"][PREPARED_PAIRING_GNARK_BENCHES[bench_id]] = ns
         elif bench_id in POSEIDON_BENCHES:
             out["poseidon"][POSEIDON_BENCHES[bench_id]] = ns
         elif bench_id in COMPRESSION_BENCHES:
@@ -329,6 +350,84 @@ def render_prepared_pairing(per_ark):
     return render_table(headers, rows)
 
 
+def render_pairing_gnark(per_ark):
+    arks = arks_with_data(per_ark, "pairing_gnark")
+    cu_ark = arks[-1] if arks else "?"
+    headers = (
+        ["n pairs", "arkworks LE (latest)"]
+        + [f"M5 Pro (ark {a}, gnark)" for a in arks]
+        + [f"CU @ 33 ns (gnark, ark {cu_ark})"]
+    )
+    rows = []
+    for n in PAIRING_GNARK_NS:
+        ark_le = (
+            per_ark.get(arks[-1], {}).get("alt_bn128", {}).get((f"Pairing n={n}", "LE"))
+            if arks
+            else None
+        )
+        gnark_times = [
+            per_ark.get(a, {}).get("pairing_gnark", {}).get((f"gnark n={n}", "LE"))
+            for a in arks
+        ]
+        cu_t = gnark_times[-1] if gnark_times else None
+        rows.append(
+            [str(n), fmt_time(ark_le)]
+            + [fmt_time(t) for t in gnark_times]
+            + [fmt_int(cu(cu_t))]
+        )
+    return render_table(headers, rows)
+
+
+def render_prepared_pairing_gnark(per_ark):
+    arks = arks_with_data(per_ark, "prepared_pairing_gnark")
+    cu_ark = arks[-1] if arks else "?"
+    headers = (
+        ["n pairs", "arkworks-prepared (latest)"]
+        + [f"M5 Pro (ark {a}, gnark-prepared)" for a in arks]
+        + [f"CU @ 33 ns (gnark, ark {cu_ark})"]
+    )
+    rows = []
+    for n in PREPARED_PAIRING_NS:
+        ark_prep = (
+            per_ark.get(arks[-1], {}).get("prepared_pairing", {}).get((f"prepared n={n}", "LE"))
+            if arks
+            else None
+        )
+        gnark_times = [
+            per_ark.get(a, {}).get("prepared_pairing_gnark", {}).get(
+                (f"prepared gnark n={n}", "LE")
+            )
+            for a in arks
+        ]
+        cu_t = gnark_times[-1] if gnark_times else None
+        rows.append(
+            [str(n), fmt_time(ark_prep)]
+            + [fmt_time(t) for t in gnark_times]
+            + [fmt_int(cu(cu_t))]
+        )
+    return render_table(headers, rows)
+
+
+def fit_pair_gnark_costs(per_ark, category, op_template):
+    """Least-squares `base + per_pair · n` over a gnark category. Returns
+    (base_cu, per_pair_cu) for the latest ark, or (None, None)."""
+    arks = arks_with_data(per_ark, category)
+    if not arks:
+        return None, None
+    d = per_ark[arks[-1]].get(category, {})
+    pts = []
+    for n in PAIRING_GNARK_NS:
+        t = d.get((op_template.format(n=n), "LE"))
+        if t is not None:
+            pts.append((n, t / NS_PER_CU))
+    if len(pts) < 2:
+        return None, None
+    xs = [n for n, _ in pts]
+    ys = [y for _, y in pts]
+    base, per_pair = least_squares(xs, ys)
+    return int(round(base)), int(round(per_pair))
+
+
 def fit_prepared_pair_costs(per_ark):
     """Least-squares fit y = base + per_pair * n over the prepared-pairing samples.
 
@@ -422,6 +521,18 @@ def render_proposed_cu(per_ark):
         rows.append(("prepared pairing base", 0, base_cu))
         rows.append(("prepared pairing per pair", 0, per_pair_cu))
 
+    gn_base, gn_pp = fit_pair_gnark_costs(per_ark, "pairing_gnark", "gnark n={n}")
+    if gn_base is not None and gn_pp is not None:
+        rows.append(("pairing gnark base", 0, gn_base))
+        rows.append(("pairing gnark per pair", 0, gn_pp))
+
+    gp_base, gp_pp = fit_pair_gnark_costs(
+        per_ark, "prepared_pairing_gnark", "prepared gnark n={n}"
+    )
+    if gp_base is not None and gp_pp is not None:
+        rows.append(("prepared pairing gnark base", 0, gp_base))
+        rows.append(("prepared pairing gnark per pair", 0, gp_pp))
+
     for op in ("g1_compress", "g1_decompress", "g2_compress", "g2_decompress"):
         t = get("compression", (op, "BE"))
         rows.append((op, MAINNET_COMPRESSION[op], cu(t)))
@@ -486,6 +597,12 @@ def update_readme(per_ark):
     text = replace_between_markers(text, "alt_bn128", render_alt_bn128(per_ark))
     text = replace_between_markers(
         text, "prepared-pairing", render_prepared_pairing(per_ark)
+    )
+    text = replace_between_markers(
+        text, "pairing-gnark", render_pairing_gnark(per_ark)
+    )
+    text = replace_between_markers(
+        text, "prepared-pairing-gnark", render_prepared_pairing_gnark(per_ark)
     )
     text = replace_between_markers(text, "poseidon", render_poseidon(per_ark))
     text = replace_between_markers(text, "compression", render_compression(per_ark))

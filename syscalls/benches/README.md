@@ -29,6 +29,10 @@ Derived: criterion upper-bound time / 33 ns/CU.
 | pairing other | 12,121 | 5,353 | -55.8% |
 | prepared pairing base | 0 | 8,393 | — |
 | prepared pairing per pair | 0 | 2,070 | — |
+| pairing gnark base | 0 | 568 | — |
+| pairing gnark per pair | 0 | 4,587 | — |
+| prepared pairing gnark base | 0 | 8,667 | — |
+| prepared pairing gnark per pair | 0 | 2,383 | — |
 | g1_compress | 30 | 11 | -63.3% |
 | g1_decompress | 398 | 144 | -63.8% |
 | g2_compress | 86 | 32 | -62.8% |
@@ -100,6 +104,58 @@ CU constants are derived per `cargo bench` run via least-squares fit `time_ns / 
 
 ```
 cargo bench -p solana-syscalls --bench alt_bn128 -- "BN254 prepared pairing"
+```
+
+---
+
+# `sol_alt_bn128_pairing_gnark` syscall bench
+
+Multi-pairing on BN254 backed by [`consensys/gnark-crypto`](https://github.com/Consensys/gnark-crypto) via cgo (`solana-bn254-gnark`). Same input shape as `sol_alt_bn128_group_op` for pairing — `n × 192` LE bytes — but LE only. Output is gnark's 32-byte LE `0x01 ‖ 0x00..` / `0x00..` boolean.
+
+CU constants surface in the proposed-cu table as "pairing gnark base" / "pairing gnark per pair".
+
+## Results (LE)
+
+<!-- TABLE-BEGIN: pairing-gnark -->
+| n pairs | arkworks LE (latest) | M5 Pro (ark 0.5, gnark) | CU @ 33 ns (gnark, ark 0.5) |
+| --- | ---: | ---: | ---: |
+| 2 | 487.26 µs | 353.86 µs | 10,723 |
+| 3 | 593.3 µs | 395.71 µs | 11,991 |
+| 4 | 809.95 µs | 657.69 µs | 19,930 |
+| 8 | 1.5061 ms | 1.2484 ms | 37,830 |
+| 16 | 2.9188 ms | 2.4335 ms | 73,742 |
+<!-- TABLE-END: pairing-gnark -->
+
+## Run
+
+```
+cargo bench -p solana-syscalls --bench alt_bn128 -- "BN254 Pairing gnark"
+```
+
+---
+
+# `sol_alt_bn128_pairing_prepared_gnark` syscall bench
+
+Multi-pairing on BN254 with precomputed G2 lines, backed by gnark-crypto. Each fixed G2 is precomputed once via `solana_bn254_gnark::g2_precompute_lines` (16,896-byte opaque blob — gnark-native `[2][66]LineEvaluationAff` layout). At pairing time we feed `n × 64` G1 LE bytes plus `n × 16,896` prepared blobs and receive a 384-byte BE `Fq12` GT element (`gnark.GT.Bytes()`). The blob layout is **not** byte-compatible with the arkworks-prepared `PodPreparedG2` (16,704 B), and the GT output uses gnark's tower order rather than arkworks's.
+
+CU constants surface in the proposed-cu table as "prepared pairing gnark base" / "prepared pairing gnark per pair".
+
+## Results (LE)
+
+<!-- TABLE-BEGIN: prepared-pairing-gnark -->
+| n pairs | arkworks-prepared (latest) | M5 Pro (ark 0.5, gnark-prepared) | CU @ 33 ns (gnark, ark 0.5) |
+| --- | ---: | ---: | ---: |
+| 2 | 412.7 µs | 443.66 µs | 13,444 |
+| 3 | 480.06 µs | 520.92 µs | 15,785 |
+| 4 | 550.73 µs | 597.09 µs | 18,094 |
+| 8 | 827.09 µs | 921.13 µs | 27,913 |
+| 16 | 1.3683 ms | 1.542 ms | 46,727 |
+<!-- TABLE-END: prepared-pairing-gnark -->
+
+## Run
+
+```
+cargo bench -p solana-syscalls --bench alt_bn128 -- "BN254 prepared pairing gnark"
 ```
 
 ---

@@ -60,6 +60,13 @@ solana-sysvar-id = { workspace = true }
 solana-transaction-context = { workspace = true, features = ["bincode"] }
 thiserror = { workspace = true }
 
+# `solana-bn254-gnark` wraps gnark-crypto via cgo and therefore cannot build for
+# the SBF target. The two `*_gnark` syscall bodies in src/lib.rs are likewise
+# gated under `cfg(not(target_os = "solana"))`, so the SBF build of
+# `solana-syscalls` never references either side of this dep.
+[target.'cfg(not(target_os = "solana"))'.dependencies]
+solana-bn254-gnark = { workspace = true }
+
 [dev-dependencies]
 ark-bn254 = "0.5"
 ark-ec = "0.5"

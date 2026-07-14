@@ -147,6 +147,10 @@ pub struct ComputeBudget {
     pub bls12_381_additional_pair_cost: u64,
     pub alt_bn128_pairing_prepared_base_cost: u64,
     pub alt_bn128_pairing_prepared_per_pair_cost: u64,
+    pub alt_bn128_pairing_gnark_base_cost: u64,
+    pub alt_bn128_pairing_gnark_per_pair_cost: u64,
+    pub alt_bn128_pairing_prepared_gnark_base_cost: u64,
+    pub alt_bn128_pairing_prepared_gnark_per_pair_cost: u64,
 }
 
 #[cfg(feature = "dev-context-only-utils")]
@@ -233,6 +237,10 @@ impl ComputeBudget {
             bls12_381_additional_pair_cost: cost.bls12_381_additional_pair_cost,
             alt_bn128_pairing_prepared_base_cost: cost.alt_bn128_pairing_prepared_base_cost,
             alt_bn128_pairing_prepared_per_pair_cost: cost.alt_bn128_pairing_prepared_per_pair_cost,
+            alt_bn128_pairing_gnark_base_cost: cost.alt_bn128_pairing_gnark_base_cost,
+            alt_bn128_pairing_gnark_per_pair_cost: cost.alt_bn128_pairing_gnark_per_pair_cost,
+            alt_bn128_pairing_prepared_gnark_base_cost: cost.alt_bn128_pairing_prepared_gnark_base_cost,
+            alt_bn128_pairing_prepared_gnark_per_pair_cost: cost.alt_bn128_pairing_prepared_gnark_per_pair_cost,
         }
     }
 
@@ -304,6 +312,10 @@ impl ComputeBudget {
             bls12_381_additional_pair_cost: self.bls12_381_additional_pair_cost,
             alt_bn128_pairing_prepared_base_cost: self.alt_bn128_pairing_prepared_base_cost,
             alt_bn128_pairing_prepared_per_pair_cost: self.alt_bn128_pairing_prepared_per_pair_cost,
+            alt_bn128_pairing_gnark_base_cost: self.alt_bn128_pairing_gnark_base_cost,
+            alt_bn128_pairing_gnark_per_pair_cost: self.alt_bn128_pairing_gnark_per_pair_cost,
+            alt_bn128_pairing_prepared_gnark_base_cost: self.alt_bn128_pairing_prepared_gnark_base_cost,
+            alt_bn128_pairing_prepared_gnark_per_pair_cost: self.alt_bn128_pairing_prepared_gnark_per_pair_cost,
         }
     }
 

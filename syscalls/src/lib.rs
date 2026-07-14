@@ -323,6 +323,11 @@ pub fn create_program_runtime_environment(
     let enable_alt_bn128_syscall = feature_set.enable_alt_bn128_syscall;
     let enable_alt_bn128_pairing_prepared_syscall =
         feature_set.enable_alt_bn128_pairing_prepared_syscall;
+    #[cfg(not(target_os = "solana"))]
+    let enable_alt_bn128_pairing_gnark_syscall = feature_set.enable_alt_bn128_pairing_gnark_syscall;
+    #[cfg(not(target_os = "solana"))]
+    let enable_alt_bn128_pairing_prepared_gnark_syscall =
+        feature_set.enable_alt_bn128_pairing_prepared_gnark_syscall;
     let enable_alt_bn128_compression_syscall = feature_set.enable_alt_bn128_compression_syscall;
     let enable_big_mod_exp_syscall = feature_set.enable_big_mod_exp_syscall;
     let blake3_syscall_enabled = feature_set.blake3_syscall_enabled;
@@ -514,6 +519,24 @@ pub fn create_program_runtime_environment(
         enable_alt_bn128_pairing_prepared_syscall,
         "sol_alt_bn128_pairing_prepared",
         SyscallAltBn128PairingPrepared
+    )?;
+
+    // gnark-backed BN254 pairings live only on the host (the FFI wraps a Go
+    // archive that cannot run inside SBF), so register them on the non-SBF
+    // build only.
+    #[cfg(not(target_os = "solana"))]
+    register_feature_gated_function!(
+        result,
+        enable_alt_bn128_pairing_gnark_syscall,
+        "sol_alt_bn128_pairing_gnark",
+        SyscallAltBn128PairingGnark
+    )?;
+    #[cfg(not(target_os = "solana"))]
+    register_feature_gated_function!(
+        result,
+        enable_alt_bn128_pairing_prepared_gnark_syscall,
+        "sol_alt_bn128_pairing_prepared_gnark",
+        SyscallAltBn128PairingPreparedGnark
     )?;
 
     // Big_mod_exp
@@ -1956,6 +1979,137 @@ declare_builtin_function!(
                 Ok(SUCCESS)
             }
             Err(_) => Ok(1),
+        }
+    }
+);
+
+// gnark-crypto cannot run inside SBF (Go runtime + cgo), so the gnark-backed
+// pairing syscalls are host-only. The corresponding feature gates and
+// `register_feature_gated_function!` calls are also `cfg(not(target_os =
+// "solana"))`-gated, so the SBF build of `solana-syscalls` never references
+// either the FFI or these structs.
+#[cfg(not(target_os = "solana"))]
+declare_builtin_function!(
+    /// `sol_alt_bn128_pairing_gnark`: full multi-pairing using gnark-crypto.
+    ///
+    /// Args:
+    /// - `num_pairs`   : number of `(G1, G2)` pairs.
+    /// - `input_addr`  : pointer to `num_pairs * 192` bytes, LE-canonical
+    ///                   `[le(G1.x), le(G1.y), le(G2.x.c0), le(G2.x.c1),
+    ///                    le(G2.y.c0), le(G2.y.c1)]` per pair.
+    /// - `result_addr` : pointer to 32 bytes; receives the gnark FFI's LE
+    ///                   output: `0x01 ‖ 0x00..0x00` if the pairing product
+    ///                   equals 1 in GT, all zeros otherwise.
+    ///
+    /// `num_pairs == 0` is valid and yields the GT identity (`out[0] = 1`),
+    /// matching the FFI's empty-input contract.
+    ///
+    /// Returns `SUCCESS (0)` on success or `1` if gnark rejects the input
+    /// (off-curve / out-of-subgroup G1 or G2).
+    SyscallAltBn128PairingGnark,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        num_pairs: u64,
+        input_addr: u64,
+        result_addr: u64,
+        _arg4: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        let check_aligned = invoke_context.get_check_aligned();
+        let execution_cost = invoke_context.get_execution_cost();
+        let cost = execution_cost
+            .alt_bn128_pairing_gnark_base_cost
+            .saturating_add(
+                execution_cost
+                    .alt_bn128_pairing_gnark_per_pair_cost
+                    .saturating_mul(num_pairs),
+            );
+        invoke_context.compute_meter.consume_checked(cost)?;
+
+        let input_len = num_pairs.saturating_mul(
+            solana_bn254_gnark::sizes::PAIRING_PAIR as u64,
+        );
+
+        let memory_mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
+        let input = translate_slice::<u8>(memory_mapping, input_addr, input_len, check_aligned)?;
+        translate_mut!(
+            memory_mapping,
+            check_aligned,
+            let result: &mut [u8; solana_bn254_gnark::sizes::PAIRING_OUTPUT] = map(result_addr)?;
+        );
+
+        match solana_bn254_gnark::pairing(input, &mut result[..]) {
+            0 => Ok(SUCCESS),
+            _ => Ok(1),
+        }
+    }
+);
+
+#[cfg(not(target_os = "solana"))]
+declare_builtin_function!(
+    /// `sol_alt_bn128_pairing_prepared_gnark`: multi-pairing with precomputed
+    /// G2 lines using gnark-crypto.
+    ///
+    /// Strict 1:1 contract: every G1 input is paired with exactly one
+    /// prepared-G2 lines blob; no reuse across pairs.
+    ///
+    /// Args:
+    /// - `num_pairs`        : number of pairs.
+    /// - `g1_addr`          : pointer to `num_pairs * 64` bytes (LE-canonical
+    ///                        G1 affine).
+    /// - `prepared_g2_addr` : pointer to `num_pairs * 16_896` bytes (opaque
+    ///                        gnark-native blobs produced off-chain via
+    ///                        `solana_bn254_gnark::g2_precompute_lines`). The
+    ///                        layout is **not** byte-compatible with the
+    ///                        arkworks-prepared `PodPreparedG2` (16_704 bytes).
+    /// - `result_addr`      : pointer to 384 bytes; receives gnark's
+    ///                        `GT.Bytes()` (BE, tower order
+    ///                        `c0.b0.a0 .. c1.b2.a1`). Layout differs from
+    ///                        the arkworks-prepared syscall's `PodGt` —
+    ///                        programs cannot mix the two outputs.
+    ///
+    /// `num_pairs == 0` returns the GT identity. Returns `SUCCESS (0)` on
+    /// success, `1` if gnark rejects any G1 input.
+    SyscallAltBn128PairingPreparedGnark,
+    fn rust(
+        invoke_context: &mut InvokeContext<'_, '_>,
+        num_pairs: u64,
+        g1_addr: u64,
+        prepared_g2_addr: u64,
+        result_addr: u64,
+        _arg5: u64,
+    ) -> Result<u64, Error> {
+        let check_aligned = invoke_context.get_check_aligned();
+        let execution_cost = invoke_context.get_execution_cost();
+        let cost = execution_cost
+            .alt_bn128_pairing_prepared_gnark_base_cost
+            .saturating_add(
+                execution_cost
+                    .alt_bn128_pairing_prepared_gnark_per_pair_cost
+                    .saturating_mul(num_pairs),
+            );
+        invoke_context.compute_meter.consume_checked(cost)?;
+
+        let g1s_len = num_pairs.saturating_mul(solana_bn254_gnark::sizes::G1_POINT as u64);
+        let lines_len = num_pairs.saturating_mul(solana_bn254_gnark::sizes::PREPARED_G2 as u64);
+
+        let memory_mapping = invoke_context.memory_contexts.memory_mapping_mut()?;
+        let g1s = translate_slice::<u8>(memory_mapping, g1_addr, g1s_len, check_aligned)?;
+        let lines = translate_slice::<u8>(
+            memory_mapping,
+            prepared_g2_addr,
+            lines_len,
+            check_aligned,
+        )?;
+        translate_mut!(
+            memory_mapping,
+            check_aligned,
+            let result: &mut [u8; solana_bn254_gnark::sizes::GT] = map(result_addr)?;
+        );
+
+        match solana_bn254_gnark::pairing_prepared(g1s, lines, &mut result[..]) {
+            0 => Ok(SUCCESS),
+            _ => Ok(1),
         }
     }
 );

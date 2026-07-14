@@ -47,5 +47,19 @@
     "prepared n=4|LE": 550730.0,
     "prepared n=8|LE": 827090.0,
     "prepared n=16|LE": 1368300.0
+  },
+  "pairing_gnark": {
+    "gnark n=2|LE": 353860.0,
+    "gnark n=3|LE": 395710.0,
+    "gnark n=4|LE": 657690.0,
+    "gnark n=8|LE": 1248400.0,
+    "gnark n=16|LE": 2433500.0
+  },
+  "prepared_pairing_gnark": {
+    "prepared gnark n=2|LE": 443660.0,
+    "prepared gnark n=3|LE": 520919.99999999994,
+    "prepared gnark n=4|LE": 597090.0,
+    "prepared gnark n=8|LE": 921130.0,
+    "prepared gnark n=16|LE": 1542000.0
   }
 }

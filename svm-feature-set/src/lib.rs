@@ -53,6 +53,8 @@ pub struct SVMFeatureSet {
     pub enable_sha512_syscall: bool,
     pub relax_post_exec_min_balance_check: bool,
     pub enable_alt_bn128_pairing_prepared_syscall: bool,
+    pub enable_alt_bn128_pairing_gnark_syscall: bool,
+    pub enable_alt_bn128_pairing_prepared_gnark_syscall: bool,
 }
 
 impl SVMFeatureSet {
@@ -110,6 +112,8 @@ impl SVMFeatureSet {
             enable_sha512_syscall: true,
             relax_post_exec_min_balance_check: true,
             enable_alt_bn128_pairing_prepared_syscall: true,
+            enable_alt_bn128_pairing_gnark_syscall: true,
+            enable_alt_bn128_pairing_prepared_gnark_syscall: true,
         }
     }
 }

@@ -202,6 +202,10 @@ pub struct SVMTransactionExecutionCost {
     pub bls12_381_additional_pair_cost: u64,
     pub alt_bn128_pairing_prepared_base_cost: u64,
     pub alt_bn128_pairing_prepared_per_pair_cost: u64,
+    pub alt_bn128_pairing_gnark_base_cost: u64,
+    pub alt_bn128_pairing_gnark_per_pair_cost: u64,
+    pub alt_bn128_pairing_prepared_gnark_base_cost: u64,
+    pub alt_bn128_pairing_prepared_gnark_per_pair_cost: u64,
 }
 
 impl Default for SVMTransactionExecutionCost {
@@ -260,6 +264,14 @@ impl Default for SVMTransactionExecutionCost {
             bls12_381_additional_pair_cost: 13_023,
             alt_bn128_pairing_prepared_base_cost: 8_393,
             alt_bn128_pairing_prepared_per_pair_cost: 2_070,
+            // Bench-derived (criterion upper-bound / 33 ns per CU, M5 Pro,
+            // ark 0.5 / gnark-crypto v0.20.1) via least-squares fit
+            // `cu = base + per_pair * n` over n ∈ {2,3,4,8,16}. See
+            // syscalls/benches/README.md for the underlying numbers.
+            alt_bn128_pairing_gnark_base_cost: 568,
+            alt_bn128_pairing_gnark_per_pair_cost: 4_587,
+            alt_bn128_pairing_prepared_gnark_base_cost: 8_667,
+            alt_bn128_pairing_prepared_gnark_per_pair_cost: 2_383,
         }
     }
 }

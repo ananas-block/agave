@@ -4,7 +4,7 @@ use {
     ark_bn254::{Fr, G1Projective, G2Projective},
     ark_ec::{AffineRepr, CurveGroup},
     ark_ff::UniformRand,
-    ark_serialize::CanonicalSerialize,
+    ark_serialize::{CanonicalSerialize, Compress},
     ark_std::rand::{rngs::StdRng, SeedableRng},
 };
 
@@ -17,19 +17,31 @@ fn rng() -> StdRng {
     StdRng::seed_from_u64(SEED)
 }
 
+// Field-by-field LE serialization matching solana-bn254's `PodG1` /
+// `PodG2` byte format (the canonical format that both the arkworks
+// pairing path and the gnark FFI accept). 64 zero bytes (resp. 128) for
+// the affine identity.
 fn g1_le(p: G1Projective) -> [u8; 64] {
     let mut buf = [0u8; 64];
-    p.into_affine()
-        .serialize_uncompressed(&mut buf[..])
-        .expect("G1 serialize");
+    let aff = p.into_affine();
+    if let Some((x, y)) = aff.xy() {
+        x.serialize_with_mode(&mut buf[..32], Compress::No)
+            .expect("Fq.x");
+        y.serialize_with_mode(&mut buf[32..], Compress::No)
+            .expect("Fq.y");
+    }
     buf
 }
 
 fn g2_le(p: G2Projective) -> [u8; 128] {
     let mut buf = [0u8; 128];
-    p.into_affine()
-        .serialize_uncompressed(&mut buf[..])
-        .expect("G2 serialize");
+    let aff = p.into_affine();
+    if let Some((x, y)) = aff.xy() {
+        x.serialize_with_mode(&mut buf[..64], Compress::No)
+            .expect("Fq2.x");
+        y.serialize_with_mode(&mut buf[64..], Compress::No)
+            .expect("Fq2.y");
+    }
     buf
 }
 
@@ -187,6 +199,53 @@ pub fn random_pairing_prepared(pool_size: usize, n: usize) -> PreparedPairingPoo
         }
         pool.g1s.push(g1s);
         pool.g2_preps.push(g2_preps);
+    }
+    pool
+}
+
+/// Pool of gnark-prepared pairing fixtures. Each entry holds, for `n` pairs,
+/// the concatenated G1 LE bytes (`n * 64` total) and the concatenated
+/// gnark-prepared G2 lines blobs (`n * 16_896` total). The 1:1 contract
+/// between G1[i] and lines[i] is preserved by construction.
+pub struct GnarkPreparedPairingPool {
+    pub g1s: Vec<Vec<u8>>,
+    pub lines: Vec<Vec<u8>>,
+}
+
+impl GnarkPreparedPairingPool {
+    fn with_capacity(n: usize) -> Self {
+        Self {
+            g1s: Vec::with_capacity(n),
+            lines: Vec::with_capacity(n),
+        }
+    }
+}
+
+/// Build `pool_size` pools of `n` random `(G1, G2)` pairs and precompute the
+/// gnark-side `[2][66]LineEvaluationAff` blob for each fixed G2. Every G1
+/// gets its OWN freshly-precomputed prepared blob (no sharing across pairs)
+/// to match the FFI's strict 1:1 contract.
+pub fn random_pairing_gnark_prepared(pool_size: usize, n: usize) -> GnarkPreparedPairingPool {
+    use solana_bn254_gnark::sizes::{G1_POINT, G2_POINT, PREPARED_G2};
+
+    let mut r = rng();
+    let mut pool = GnarkPreparedPairingPool::with_capacity(pool_size);
+    for _ in 0..pool_size {
+        let mut g1s_concat = Vec::with_capacity(G1_POINT * n);
+        let mut lines_concat = Vec::with_capacity(PREPARED_G2 * n);
+        for _ in 0..n {
+            let g1 = G1Projective::rand(&mut r);
+            let g2 = G2Projective::rand(&mut r);
+            g1s_concat.extend_from_slice(&g1_le(g1));
+            let g2_bytes = g2_le(g2);
+            debug_assert_eq!(g2_bytes.len(), G2_POINT);
+            let mut blob = vec![0u8; PREPARED_G2];
+            let code = solana_bn254_gnark::g2_precompute_lines(&g2_bytes, &mut blob);
+            assert_eq!(code, 0, "g2_precompute_lines returned {code}");
+            lines_concat.extend_from_slice(&blob);
+        }
+        pool.g1s.push(g1s_concat);
+        pool.lines.push(lines_concat);
     }
     pool
 }

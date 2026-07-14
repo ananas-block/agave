@@ -189,11 +189,71 @@ fn bench_pairing_prepared(c: &mut Criterion) {
     group.finish();
 }
 
+fn bench_pairing_gnark(c: &mut Criterion) {
+    const NS: &[usize] = &[2, 3, 4, 8, 16];
+
+    let mut group = c.benchmark_group("BN254 Pairing gnark");
+    for &n in NS {
+        // Reuses the existing telescoping LE pool — gnark's full-pairing FFI
+        // accepts the same `n * 192`-byte LE concatenation that the standard
+        // alt_bn128 pairing path already produces.
+        let pool = random_fixtures::random_pairing(PAIRING_POOL, n);
+
+        for le in pool.le.iter() {
+            let mut out = [0u8; solana_bn254_gnark::sizes::PAIRING_OUTPUT];
+            let code = solana_bn254_gnark::pairing(le, &mut out);
+            assert_eq!(code, 0, "gnark pairing returned {code}");
+            assert_eq!(out[0], 0x01, "telescoping inputs must pair to identity");
+        }
+
+        let mut out = [0u8; solana_bn254_gnark::sizes::PAIRING_OUTPUT];
+        let mut i = 0usize;
+        group.bench_with_input(BenchmarkId::new("LE", n), &n, |b, _| {
+            b.iter(|| {
+                let code = solana_bn254_gnark::pairing(&pool.le[i], &mut out);
+                i = (i + 1) % PAIRING_POOL;
+                code
+            })
+        });
+    }
+    group.finish();
+}
+
+fn bench_pairing_prepared_gnark(c: &mut Criterion) {
+    const NS: &[usize] = &[2, 3, 4, 8, 16];
+    const POOL: usize = 64;
+
+    let mut group = c.benchmark_group("BN254 prepared pairing gnark");
+    for &n in NS {
+        let pool = random_fixtures::random_pairing_gnark_prepared(POOL, n);
+
+        for (g1s, lines) in pool.g1s.iter().zip(pool.lines.iter()) {
+            let mut gt = [0u8; solana_bn254_gnark::sizes::GT];
+            let code = solana_bn254_gnark::pairing_prepared(g1s, lines, &mut gt);
+            assert_eq!(code, 0, "gnark prepared pairing returned {code}");
+        }
+
+        let mut gt = [0u8; solana_bn254_gnark::sizes::GT];
+        let mut i = 0usize;
+        group.bench_with_input(BenchmarkId::new("LE", n), &n, |b, _| {
+            b.iter(|| {
+                let code =
+                    solana_bn254_gnark::pairing_prepared(&pool.g1s[i], &pool.lines[i], &mut gt);
+                i = (i + 1) % POOL;
+                code
+            })
+        });
+    }
+    group.finish();
+}
+
 criterion_group!(
     benches,
     bench_g1_random,
     bench_g2_random,
     bench_pairing_random,
     bench_pairing_prepared,
+    bench_pairing_gnark,
+    bench_pairing_prepared_gnark,
 );
 criterion_main!(benches);

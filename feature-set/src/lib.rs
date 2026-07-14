@@ -88,6 +88,8 @@ pub struct FeatureSnapshot {
     pub relax_post_exec_min_balance_check: bool,
     pub enable_tx_v1: bool,
     pub enable_alt_bn128_pairing_prepared_syscall: bool,
+    pub enable_alt_bn128_pairing_gnark_syscall: bool,
+    pub enable_alt_bn128_pairing_prepared_gnark_syscall: bool,
 }
 
 impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
@@ -205,6 +207,12 @@ impl From<&AHashMap<Pubkey, u64>> for FeatureSnapshot {
             enable_tx_v1: is_active(&enable_tx_v1::ID),
             enable_alt_bn128_pairing_prepared_syscall: is_active(
                 &enable_alt_bn128_pairing_prepared_syscall::ID,
+            ),
+            enable_alt_bn128_pairing_gnark_syscall: is_active(
+                &enable_alt_bn128_pairing_gnark_syscall::ID,
+            ),
+            enable_alt_bn128_pairing_prepared_gnark_syscall: is_active(
+                &enable_alt_bn128_pairing_prepared_gnark_syscall::ID,
             ),
         }
     }
@@ -373,6 +381,10 @@ impl FeatureSet {
             relax_post_exec_min_balance_check: snapshot.relax_post_exec_min_balance_check,
             enable_alt_bn128_pairing_prepared_syscall: snapshot
                 .enable_alt_bn128_pairing_prepared_syscall,
+            enable_alt_bn128_pairing_gnark_syscall: snapshot
+                .enable_alt_bn128_pairing_gnark_syscall,
+            enable_alt_bn128_pairing_prepared_gnark_syscall: snapshot
+                .enable_alt_bn128_pairing_prepared_gnark_syscall,
         }
     }
 }
@@ -1550,6 +1562,17 @@ pub mod enable_alt_bn128_pairing_prepared_syscall {
     solana_pubkey::declare_id!("bn1hKNURMGQaQoEVxahcEAcqiX3NwRs6hgKKNSLeKxK");
 }
 
+// Placeholder pubkey: sha256("enable_alt_bn128_pairing_gnark_syscall_v1") base58.
+// Replace with the SIMD-issued pubkey before activating on any cluster.
+pub mod enable_alt_bn128_pairing_gnark_syscall {
+    solana_pubkey::declare_id!("6uDSeBQXwVnLbGxSAaVvbjv8EpQ7XLmgJBpq6Q47mrja");
+}
+
+// Placeholder pubkey: sha256("enable_alt_bn128_pairing_prepared_gnark_syscall_v1") base58.
+pub mod enable_alt_bn128_pairing_prepared_gnark_syscall {
+    solana_pubkey::declare_id!("B8keKpcsq8tqC7A6LfwkxTYUzBZHf1Pw7BpTARWbcT26");
+}
+
 pub static FEATURE_NAMES: LazyLock<AHashMap<Pubkey, &'static str>> = LazyLock::new(|| {
     [
         (secp256k1_program_enabled::id(), "secp256k1 program"),
@@ -2607,6 +2630,14 @@ pub static FEATURE_NAMES: LazyLock<AHashMap<Pubkey, &'static str>> = LazyLock::n
         (
             enable_alt_bn128_pairing_prepared_syscall::id(),
             "SIMD-TBD: alt_bn128 multi-pairing with pre-prepared G2 inputs",
+        ),
+        (
+            enable_alt_bn128_pairing_gnark_syscall::id(),
+            "SIMD-TBD: alt_bn128 multi-pairing backed by gnark-crypto",
+        ),
+        (
+            enable_alt_bn128_pairing_prepared_gnark_syscall::id(),
+            "SIMD-TBD: alt_bn128 multi-pairing with pre-prepared G2 backed by gnark-crypto",
         ),
         /*************** ADD NEW FEATURES HERE ***************/
         /***** ADD NEW FEATURE BOOL TO `FeatureSnapshot` *****/
